@@ -181,25 +181,44 @@ class DownloadWorker(QThread):
                 raise Exception("FFmpeg not found in PATH. Please add it to PATH or set a custom path in the configuration.")
             
             # Prepare the options for yt-dlp
+           # Build ydl options
+            # Build ydl options — prefer merged video+audio output for video downloads
             ydl_opts = {
                 'outtmpl': outtmpl,
-                'format': 'bestaudio/best' if self.download_type == 'audio' else 'bestvideo+bestaudio/best',
+                'format': 'bestaudio/best' if self.download_type == 'audio' else 'bestvideo*+bestaudio*/best',
                 'noplaylist': True,
-                'postprocessors': [{
+                'quiet': False,
+                'no_warnings': False,
+            }
+
+            # Add cookies support
+            if self.cookies_file:
+                ydl_opts['cookiefile'] = self.cookies_file
+
+            # Video download → merge video + audio into one MP4
+            if self.download_type == 'video':
+                ydl_opts['merge_output_format'] = 'mp4'
+
+            # Audio download → convert to mp3
+            if self.download_type == 'audio':
+                ydl_opts['postprocessors'] = [{
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': 'mp3',
                     'preferredquality': '192',
-                }] if self.download_type == 'audio' else [],
-                'ffmpeg_location': self.ffmpeg_path if self.ffmpeg_path != 'ffmpeg' else None,
-            }
+                }]
 
-            # Initialize YoutubeDL with options
+            # ffmpeg path
+            if self.ffmpeg_path and os.path.isfile(self.ffmpeg_path):
+                ydl_opts['ffmpeg_location'] = os.path.dirname(self.ffmpeg_path)
+
+
+            # cookies support (if you set cookies_file previously)
+            if getattr(self, 'cookies_file', None):
+                ydl_opts['cookiefile'] = self.cookies_file
+
             with YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(self.video_url, download=True)
+                ydl.extract_info(self.video_url, download=True)
 
-            self.download_complete.emit(f"Download finished! Saved to {self.directory}")
-        except Exception as e:
-            self.download_error.emit(str(e))
     
     def is_ffmpeg_in_path(self):
         """Check if ffmpeg is available in the system's PATH by running 'ffmpeg -version'."""
