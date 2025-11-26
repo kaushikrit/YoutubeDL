@@ -22,7 +22,6 @@ DEFAULT_CONFIG = {
         "music.youtube.com",
         "instagram.com",
     ],
-    "cookies_file": ""
 }
 
 # ----------------------------- PATH / CONFIG FILE --------------------------
