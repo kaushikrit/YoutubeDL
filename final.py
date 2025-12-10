@@ -196,14 +196,23 @@ class DownloadWorker(QThread):
                 def warning(self, msg): pass
                 def error(self, msg): pass
 
-            debug_messages = []
             def progress_hook(d):
-                try:
-                    debug_messages.append(str(d))
-                    if len(debug_messages) > 200:
-                        debug_messages.pop(0)
-                except Exception:
-                    pass
+                if d.get('status') == 'downloading':
+                    total = d.get('total_bytes') or d.get('total_bytes_estimate')
+                    downloaded = d.get('downloaded_bytes', 0)
+
+                    if total:
+                        percent = downloaded / total * 100
+                        print(f"\rDownloading: {percent:.2f}%  ({downloaded/1024/1024:.2f}MB / {total/1024/1024:.2f}MB)", end="")
+                    else:
+                        print(f"\rDownloading: {downloaded/1024/1024:.2f}MB", end="")
+
+                elif d.get('status') == 'finished':
+                    print("\nDownload finished, merging formats...")
+
+                elif d.get('status') == 'error':
+                    print("\nError occurred during download.")
+
 
             ydl_opts['logger'] = GuiLogger()
             ydl_opts['progress_hooks'] = [progress_hook]

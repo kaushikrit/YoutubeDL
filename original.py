@@ -125,10 +125,13 @@ class ConfigDialog(QDialog):
         else:
             self.config = DEFAULT_CONFIG
 
-        self.ffmpeg_path_input.setText(self.config.get("ffmpeg_path", DEFAULT_CONFIG["ffmpeg_path"]))
-        self.save_directory_input.setText(self.config.get("save_directory", DEFAULT_CONFIG["save_directory"]))
-        self.template_string_input.setText(self.config.get("filename_template", DEFAULT_CONFIG.get("filename_template", '%(title)s [%(id)s].%(ext)s')))
-        self.supported_sites_input.setPlainText("\n".join(self.config.get("supported_sites", DEFAULT_CONFIG["supported_sites"])))
+        self.ffmpeg_path = self.config.get("ffmpeg_path", DEFAULT_CONFIG["ffmpeg_path"])
+        self.save_directory = self.config.get("save_directory", DEFAULT_CONFIG["save_directory"])
+        self.supported_sites = self.config.get("supported_sites", DEFAULT_CONFIG["supported_sites"])
+        self.filename_template = self.config.get("filename_template", DEFAULT_CONFIG.get("filename_template", '%(title)s [%(id)s].%(ext)s'))
+        self.cookies_file = self.config.get("cookies_file", None)
+
+
 
     def get_config(self):
         return {
@@ -162,7 +165,7 @@ class DownloadWorker(QThread):
     download_complete = pyqtSignal(str)
     download_error = pyqtSignal(str)
 
-    def __init__(self, video_url, download_type, ffmpeg_path, directory, filename_template, manual_filename):
+    def __init__(self, video_url, download_type, ffmpeg_path, directory, filename_template, manual_filename, cookies_file=None):
         super().__init__()
         self.video_url = video_url
         self.download_type = download_type
@@ -170,6 +173,8 @@ class DownloadWorker(QThread):
         self.directory = directory
         self.filename_template = filename_template
         self.manual_filename = manual_filename
+        self.cookies_file = cookies_file
+
 
     def run(self):
         try:
@@ -218,6 +223,8 @@ class DownloadWorker(QThread):
 
             with YoutubeDL(ydl_opts) as ydl:
                 ydl.extract_info(self.video_url, download=True)
+        except Exception as e:
+            self.download_error.emit(str(e))
 
     
     def is_ffmpeg_in_path(self):
@@ -231,6 +238,11 @@ class DownloadWorker(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.cookies_file = None
+        default_cookie_path = os.path.join(os.path.dirname(__file__), "cookies_yt.txt")
+        if os.path.exists(default_cookie_path):
+            self.cookies_file = default_cookie_path
+
         self.icon_path = os.path.join(os.path.dirname(__file__), "icon.ico")
         self.setWindowTitle("YoutubeDL")
         self.setFixedSize(400, 500)
@@ -424,7 +436,16 @@ class MainWindow(QMainWindow):
         self.loading_movie.start()
         
         # Pass manual filename to DownloadWorker
-        self.download_worker = DownloadWorker(video_url, download_type, ffmpeg_path, directory, self.filename_template, manual_filename)
+        self.download_worker = DownloadWorker(
+            video_url,
+            download_type,
+            ffmpeg_path,
+            directory,
+            self.filename_template,
+            manual_filename,
+            self.cookies_file   # <-- ADD THIS
+        )
+
         self.download_worker.download_complete.connect(self.on_download_complete)
         self.download_worker.download_error.connect(self.on_download_error)
         self.download_worker.start()
